@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+  <title>TV Converter</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▶</span>
+      <span>TV Converter</span>
+    </div>
+    <div class="caps" id="caps">detecting ffmpeg…</div>
+    <div class="topbar-actions">
+      <button id="btn-add" class="btn">Add files…</button>
+      <button id="btn-start" class="btn primary" disabled>Start</button>
+      <button id="btn-stop" class="btn danger" hidden>Stop</button>
+      <button id="btn-settings" class="btn ghost" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="queue" id="queue">
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon">⬇</div>
+        <div class="dz-title">Drop video files or folders here</div>
+        <div class="dz-sub">MKV, MP4, TS, AVI, WebM… each becomes a TV-safe MP4 with the same name</div>
+      </div>
+      <div class="queue-scroll" id="queue-scroll" hidden><table class="jobs" id="jobs">
+        <thead>
+          <tr><th class="c-name">File</th><th class="c-size">Size</th><th class="c-plan">Plan</th><th class="c-status">Status</th><th class="c-actions"></th></tr>
+        </thead>
+        <tbody id="jobs-body"></tbody>
+      </table></div>
+      <footer class="queue-footer" id="queue-footer" hidden>
+        <span id="summary"></span>
+        <span class="spacer"></span>
+        <button id="btn-clear" class="btn ghost small">Clear finished</button>
+        <button id="btn-open-out" class="btn ghost small">Open output folder</button>
+      </footer>
+    </section>
+
+    <aside class="settings" id="settings" hidden>
+      <h2>Settings</h2>
+
+      <label class="field">
+        <span>Output folder</span>
+        <div class="row">
+          <input id="s-outputDir" type="text" placeholder="(next to source, in “TV Ready”)" readonly />
+          <button id="s-outputDir-pick" class="btn small">Choose</button>
+          <button id="s-outputDir-clear" class="btn small ghost" title="Use “TV Ready” next to each source">✕</button>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>Video codec when re-encoding</span>
+        <select id="s-videoCodec">
+          <option value="hevc">HEVC / H.265 (smaller files; any 4K Samsung)</option>
+          <option value="h264">H.264 (older 1080p TVs)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Max resolution</span>
+        <select id="s-maxHeight">
+          <option value="2160">4K (2160p)</option>
+          <option value="1080">1080p (downscale 4K)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Quality (CQ/CRF, lower = better, 18–28)</span>
+        <input id="s-quality" type="number" min="14" max="32" step="1" />
+      </label>
+
+      <label class="field check">
+        <input id="s-allowHevc10bit" type="checkbox" />
+        <span>Pass through 10-bit HEVC without re-encoding <small>(untick if your TV stutters on Main10)</small></span>
+      </label>
+
+      <label class="field">
+        <span>HDR sources when re-encoding</span>
+        <select id="s-hdrMode">
+          <option value="keep">Keep HDR (10-bit HEVC output)</option>
+          <option value="tonemap">Tonemap to SDR (for non-HDR TVs)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Subtitles</span>
+        <select id="s-subtitleMode">
+          <option value="sidecar">Sidecar .srt files next to output (recommended)</option>
+          <option value="embed">Embed in MP4 (mov_text)</option>
+          <option value="burn">Burn into video (forces re-encode)</option>
+          <option value="none">Drop</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Parallel jobs</span>
+        <select id="s-concurrency">
+          <option value="1">1 (recommended for GPU)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+
+      <label class="field check">
+        <input id="s-deleteSourceOnSuccess" type="checkbox" />
+        <span>Move source to Recycle Bin after success</span>
+      </label>
+
+      <div class="caps-detail" id="caps-detail"></div>
+      <button id="btn-redetect" class="btn small ghost">Re-detect encoders</button>
+    </aside>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><span id="modal-title"></span><button class="btn ghost small" id="modal-close">✕</button></div>
+      <pre id="modal-body"></pre>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

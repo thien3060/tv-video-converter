@@ -1,0 +1,40 @@
+appId: xyz.microscape.tvconverter
+productName: TV Converter
+directories:
+  output: dist
+  buildResources: build
+files:
+  - src/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+compression: normal
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  # ffmpeg/ffprobe → <install>/resources/bin/win32/ (ffmpeg.js looks there first)
+  extraResources:
+    - from: resources/bin/win32
+      to: bin/win32
+  # Unsigned build – Windows SmartScreen will warn on first run.
+  signAndEditExecutable: true
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: TV Converter
+  artifactName: "${productName}-Setup-${version}.${ext}"
+portable:
+  artifactName: "${productName}-Portable-${version}.${ext}"
+mac:
+  target: [dir]
+  icon: build/icon.png
+  category: public.app-category.video
+  extraResources:
+    - from: resources/bin/darwin
+      to: bin/darwin

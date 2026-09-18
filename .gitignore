@@ -1,0 +1,7 @@
+node_modules/
+dist/
+resources/bin/*/ffmpeg*
+resources/bin/*/ffprobe*
+.brew-ffmpeg.log
+*.log
+.DS_Store
