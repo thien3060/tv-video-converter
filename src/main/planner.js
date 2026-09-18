@@ -47,8 +47,61 @@ function videoBitrateMbps(probe, v) {
   return f / 1e6;
 }
 
+// MP4 stores exactly one ISO 639-2 code per track. ffmpeg silently drops anything it
+// can't pack ('es-419', 'pt-BR', 'spa-mx', ...) and the TV then shows "Language N".
+// [iso639-2/B, iso639-1, display name, extra aliases that show up in tags/titles]
+const LANGS = [
+  ['eng', 'en', 'English'], ['spa', 'es', 'Spanish', 'español', 'espanol', 'castellano', 'latino', 'latin'],
+  ['por', 'pt', 'Portuguese', 'português', 'portugues', 'brazil', 'brasil'], ['fre', 'fr', 'French', 'français', 'francais'],
+  ['ger', 'de', 'German', 'deutsch'], ['ita', 'it', 'Italian', 'italiano'], ['dut', 'nl', 'Dutch', 'nederlands'],
+  ['rus', 'ru', 'Russian', 'русский'], ['jpn', 'ja', 'Japanese', '日本語'], ['kor', 'ko', 'Korean', '한국어'],
+  ['chi', 'zh', 'Chinese', 'zho', 'mandarin', 'cantonese', '中文', '简体', '繁體', '繁体'],
+  ['vie', 'vi', 'Vietnamese', 'tiếng việt', 'tieng viet'], ['tha', 'th', 'Thai', 'ไทย'], ['ind', 'id', 'Indonesian', 'bahasa'],
+  ['may', 'ms', 'Malay', 'msa'], ['ara', 'ar', 'Arabic', 'عربي'], ['heb', 'he', 'Hebrew', 'iw'], ['tur', 'tr', 'Turkish', 'türkçe'],
+  ['pol', 'pl', 'Polish', 'polski'], ['cze', 'cs', 'Czech', 'ces', 'čeština'], ['slo', 'sk', 'Slovak', 'slk'],
+  ['hun', 'hu', 'Hungarian', 'magyar'], ['rum', 'ro', 'Romanian', 'ron', 'română'], ['bul', 'bg', 'Bulgarian'],
+  ['gre', 'el', 'Greek', 'ell', 'ελληνικά'], ['swe', 'sv', 'Swedish', 'svenska'], ['nor', 'no', 'Norwegian', 'nb', 'nob', 'nn', 'nno', 'norsk'],
+  ['dan', 'da', 'Danish', 'dansk'], ['fin', 'fi', 'Finnish', 'suomi'], ['ukr', 'uk', 'Ukrainian'], ['hrv', 'hr', 'Croatian'],
+  ['srp', 'sr', 'Serbian'], ['slv', 'sl', 'Slovenian'], ['hin', 'hi', 'Hindi'], ['tam', 'ta', 'Tamil'], ['tel', 'te', 'Telugu'],
+  ['ben', 'bn', 'Bengali'], ['urd', 'ur', 'Urdu'], ['per', 'fa', 'Persian', 'fas', 'farsi'], ['fil', 'tl', 'Filipino', 'tgl', 'tagalog'],
+  ['cat', 'ca', 'Catalan'], ['baq', 'eu', 'Basque', 'eus'], ['glg', 'gl', 'Galician'], ['lit', 'lt', 'Lithuanian'],
+  ['lav', 'lv', 'Latvian'], ['est', 'et', 'Estonian'], ['ice', 'is', 'Icelandic', 'isl'], ['mal', 'ml', 'Malayalam'],
+];
+const LANG_BY_CODE = new Map();
+for (const [b, t, name, ...aliases] of LANGS) {
+  for (const k of [b, t, name, ...aliases]) LANG_BY_CODE.set(k.toLowerCase(), b);
+}
+
+// Normalise any language tag to a 3-letter ISO 639-2/B code, or 'und'.
+function normalizeLang(tag) {
+  if (!tag) return 'und';
+  const t = String(tag).trim().toLowerCase();
+  if (!t || t === 'und' || t === 'mis' || t === 'zxx') return 'und';
+  // 'es-419' / 'pt_BR' / 'spa-mx' → primary subtag only
+  const primary = t.split(/[-_]/)[0];
+  return LANG_BY_CODE.get(primary) || (primary.length === 3 ? primary : 'und');
+}
+
+// Untagged tracks often say what they are in the title ("Spanish (Latin America)", "Português").
+function langFromTitle(title) {
+  if (!title) return 'und';
+  const words = title.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean);
+  for (const w of words) {
+    const code = LANG_BY_CODE.get(w);
+    if (code && w.length > 2) return code; // skip 2-letter hits: too many false positives in titles
+  }
+  return 'und';
+}
+
 function langOf(s) {
-  return (s.tags && (s.tags.language || s.tags.LANGUAGE)) || 'und';
+  const tag = s.tags && (s.tags.language || s.tags.LANGUAGE);
+  const code = normalizeLang(tag);
+  return code !== 'und' ? code : langFromTitle(s.tags && s.tags.title);
+}
+
+function languageName(code) {
+  const row = LANGS.find((l) => l[0] === code);
+  return row ? row[2] : code === 'und' ? 'Unknown' : code.toUpperCase();
 }
 
 function planVideo(probe, v, settings, burnSubs) {
@@ -179,4 +232,4 @@ function plan(probe, userSettings = {}) {
   };
 }
 
-module.exports = { plan, DEFAULT_SETTINGS, isHdr, is10bit };
+module.exports = { plan, DEFAULT_SETTINGS, isHdr, is10bit, normalizeLang, langFromTitle, languageName };

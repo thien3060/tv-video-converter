@@ -42,6 +42,7 @@ Data flow: drop/dialog → `jobs:add` → `analyze()` (probe → plan) → `job:
 - Bitmap subs (PGS/VobSub) can't be burned via the `subtitles` filter; `buildArgs` switches to `-filter_complex ... overlay` and replaces the initial `-map` via `splice`.
 - `-hwaccel cuda` is only added for NVENC *and* only when no software filter (tonemap/burn) is in the chain.
 - HDR re-encode without tonemap must stay 10-bit HEVC regardless of `videoCodec` preference (8-bit HDR looks grey). Tonemap sets colour tags via `setparams` in-graph because encoders ignore bare `-color_*` flags.
+- Embedded `mov_text` tracks need `-s:s:N WxH` (output picture size): tx3g's default text box is "the track's size" and a converted subtitle track is 0×0, so the TV lists the track but renders nothing. MP4 holds one ISO 639-2 code per track; `planner.js#langOf` normalises `es-419`/`pt_BR`/2-letter tags and falls back to the title, and `buildArgs` always writes `language=` itself (ffmpeg silently drops unpackable tags → "Language N" on the TV).
 - `encoderArgs` maps the single `quality` setting differently per encoder (`-cq`, `-global_quality`, `-qp_*`, VideoToolbox `-q:v` inverted scale, `-crf`); maxrate/bufsize are tiered by output height.
 
 ## Packaging notes

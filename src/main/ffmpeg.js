@@ -3,6 +3,7 @@
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { languageName } = require('./planner');
 
 // ---------- binary location ----------
 
@@ -188,6 +189,26 @@ function buildVideoFilter(plan, caps, inputFile, subIndexInFile) {
   return filters.join(',');
 }
 
+// Final picture size after any scale step, for sizing the subtitle tracks (null if unknown).
+function outputDims(v) {
+  let { width, height } = v.source || {};
+  if (!width || !height) return null;
+  if (v.scaleTo && v.scaleTo.height) { width = Math.round((width * v.scaleTo.height) / height / 2) * 2; height = v.scaleTo.height; }
+  else if (v.scaleTo && v.scaleTo.width) { height = Math.round((height * v.scaleTo.width) / width / 2) * 2; width = v.scaleTo.width; }
+  return { width, height };
+}
+
+// Track name shown by players that list titles: keep the source title, else build one from the
+// language, and number tracks that would otherwise be indistinguishable ("Spanish", "Spanish 2").
+function embedTitle(x, all) {
+  if (x.title) return x.title;
+  let name = languageName(x.language);
+  if (x.forced) name += ' (forced)';
+  const same = all.filter((o) => !o.title && o.language === x.language && !!o.forced === !!x.forced);
+  if (same.length > 1) name += ` ${same.indexOf(x) + 1}`;
+  return name;
+}
+
 // Returns { args, sidecars: [{index, path}] }
 function buildArgs(inputFile, outputFile, plan, caps, finalOutput = outputFile) {
   const s = plan.settings;
@@ -238,9 +259,16 @@ function buildArgs(inputFile, outputFile, plan, caps, finalOutput = outputFile) 
 
   // --- embedded subtitles ---
   const embed = plan.subtitles.filter((x) => x.action === 'embed');
+  const dims = outputDims(plan.video);
   embed.forEach((x, i) => {
     args.push('-map', `0:${x.index}`, `-c:s:${i}`, 'mov_text');
-    if (x.language !== 'und') args.push(`-metadata:s:s:${i}`, `language=${x.language}`);
+    // tx3g's default text box is "the whole track", and a converted subtitle track has no size of
+    // its own, so without this the TV lists the track but draws the text into a 0x0 box.
+    if (dims) args.push(`-s:s:${i}`, `${dims.width}x${dims.height}`);
+    // Always set the language ourselves: the source tag may be one MP4 can't hold ('es-419'),
+    // which ffmpeg would drop and the TV would then show as "Language N".
+    args.push(`-metadata:s:s:${i}`, `language=${x.language}`);
+    args.push(`-metadata:s:s:${i}`, `title=${embedTitle(x, embed)}`);
   });
   if (!embed.length) args.push('-sn');
 

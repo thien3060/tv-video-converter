@@ -102,6 +102,11 @@ test('embed subtitles as mov_text', { skip: !have }, async () => {
   const subs = r.out.streams.filter((s) => s.codec_type === 'subtitle');
   assert.equal(subs.length, 1);
   assert.equal(subs[0].codec_name, 'mov_text');
+  // tx3g track must carry the picture size or TVs render the text into a 0x0 box
+  assert.equal(subs[0].width, vid(r.out).width);
+  assert.equal(subs[0].height, vid(r.out).height);
+  assert.equal(subs[0].tags.language, 'eng');
+  assert.equal(subs[0].tags.name, 'English');
 });
 
 test('downscale to 1080p from a larger source', { skip: !have }, async () => {

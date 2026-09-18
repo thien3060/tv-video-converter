@@ -102,3 +102,16 @@ test('cover art streams are ignored as video', () => {
 test('throws without a video stream', () => {
   assert.throws(() => plan({ streams: [{ index: 0, codec_type: 'audio', codec_name: 'aac' }], format: {} }), /no video/);
 });
+
+test('subtitle language: regional/2-letter tags normalise to ISO 639-2, untagged tracks infer from title', () => {
+  const subs = [
+    { tags: { language: 'es-419', title: 'Spanish (Latin America)' } },
+    { tags: { language: 'und', title: 'Español' } },
+    { tags: { language: 'pt_BR' } },
+    { tags: { title: 'Forced' } },
+    { tags: { language: 'zho' } },
+  ];
+  const p = plan(probe({ subs }));
+  assert.deepEqual(p.subtitles.map((s) => s.language), ['spa', 'spa', 'por', 'und', 'chi']);
+  assert.deepEqual(p.subtitles.map((s) => s.action), ['embed', 'embed', 'embed', 'embed', 'embed']);
+});
