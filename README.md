@@ -1,7 +1,7 @@
 # TV Converter
 
 Drop video files in, get Samsung-TV-safe MP4s out. Each input becomes one `.mp4`
-with the same name (plus sidecar `.srt` files for text subtitles).
+with the same name (text subtitles embedded as mov_text by default).
 
 It probes every file with `ffprobe` and does the **minimum** needed:
 
@@ -13,7 +13,7 @@ It probes every file with `ffprobe` and does the **minimum** needed:
 | HDR sources needing re-encode                 | kept as 10-bit HEVC HDR, or tonemapped   |
 | DTS / TrueHD / FLAC / Opus / PCM audio        | → AC3 5.1 (640k) or AAC stereo (192k)    |
 | AAC / AC3 / E-AC3 / MP3 audio                 | copied                                   |
-| Text subtitles                                | sidecar `.srt` (default), embed, or burn |
+| Text subtitles                                | embed as mov_text (default), sidecar `.srt`, or burn |
 | PGS/VobSub bitmap subtitles                   | dropped unless "burn" is chosen          |
 
 Encoder priority: NVENC → QSV → AMF → VideoToolbox → libx265/libx264 (CPU).

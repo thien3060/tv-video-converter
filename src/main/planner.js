@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS = {
   maxHeight: 2160,             // 2160 | 1080
   allowHevc10bit: true,        // pass through HEVC Main10 without re-encoding
   hdrMode: 'keep',             // 'keep' | 'tonemap'  (only matters on re-encode)
-  subtitleMode: 'sidecar',     // 'sidecar' | 'embed' | 'burn' | 'none'
+  subtitleMode: 'embed',       // 'sidecar' | 'embed' | 'burn' | 'none'
   maxBitrateH264: 50,          // Mbps – above this, re-encode
   maxBitrateHevc: 80,          // Mbps
   quality: 23,                 // CQ / CRF

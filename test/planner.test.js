@@ -75,7 +75,7 @@ test('audio: DTS → ac3 (6ch), FLAC stereo → aac, 8ch → 6ch ac3', () => {
 
 test('subtitles: sidecar for text, drop PGS unless burning; burn picks forced track only', () => {
   const subs = [{ codec_name: 'subrip' }, { codec_name: 'hdmv_pgs_subtitle', tags: { language: 'jpn' } }, { codec_name: 'ass', disposition: { forced: 1 } }];
-  const side = plan(probe({ subs }));
+  const side = plan(probe({ subs }), { subtitleMode: 'sidecar' });
   assert.deepEqual(side.subtitles.map((s) => s.action), ['sidecar', 'drop', 'sidecar']);
   assert.equal(side.video.action, 'copy');
 

@@ -30,7 +30,7 @@ const vid = (pr) => pr.streams.find((s) => s.codec_type === 'video');
 const aud = (pr) => pr.streams.filter((s) => s.codec_type === 'audio');
 
 test('clean H.264/AAC MKV → remux + sidecar srt', { skip: !have }, async () => {
-  const r = await convert('clean_h264.mkv');
+  const r = await convert('clean_h264.mkv', { subtitleMode: 'sidecar' });
   assert.equal(r.plan.video.action, 'copy');
   assert.ok(r.args.includes('copy'));
   assert.equal(vid(r.out).codec_name, 'h264');

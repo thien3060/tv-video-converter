@@ -21,7 +21,7 @@ let settings = {
   maxHeight: 2160,
   allowHevc10bit: true,
   hdrMode: 'keep',
-  subtitleMode: 'sidecar',
+  subtitleMode: 'embed',
   quality: 23,
   concurrency: 1,
   deleteSourceOnSuccess: false,
