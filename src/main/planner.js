@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS = {
   maxHeight: 2160,             // 2160 | 1080
   allowHevc10bit: true,        // pass through HEVC Main10 without re-encoding
   hdrMode: 'keep',             // 'keep' | 'tonemap'  (only matters on re-encode)
-  subtitleMode: 'embed',       // 'sidecar' | 'embed' | 'burn' | 'none'
+  subtitleMode: 'embed',       // 'sidecar' | 'embed' | 'burn' | 'none'  (embed ⇒ MKV output, see outputContainer)
   maxBitrateH264: 50,          // Mbps – above this, re-encode
   maxBitrateHevc: 80,          // Mbps
   quality: 23,                 // CQ / CRF
@@ -20,6 +20,15 @@ const SAFE_VIDEO = new Set(['h264', 'hevc']);
 const SAFE_AUDIO = new Set(['aac', 'ac3', 'eac3', 'mp3']);
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'mov_text', 'webvtt', 'text']);
 const BITMAP_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub']);
+// Subtitle codecs Samsung renders from an MKV as-is; anything else text-ish is converted to SubRip.
+const MKV_COPY_SUBS = new Set(['subrip', 'ass', 'ssa', 'hdmv_pgs_subtitle', 'dvd_subtitle']);
+
+// Samsung's MP4 player is unreliable with tx3g (the only text-sub format MP4 allows): tracks get
+// listed but never drawn. Its MKV player renders SubRip/ASS/PGS/VobSub natively, so embedding
+// subtitles means producing MKV instead.
+function outputContainer(settings) {
+  return settings.subtitleMode === 'embed' ? 'mkv' : 'mp4';
+}
 
 const TEN_BIT_FORMATS = /p010|yuv4(20|22|44)p10|yuv4(20|22|44)p12|gbrp10|gbrp12/;
 
@@ -93,10 +102,15 @@ function langFromTitle(title) {
   return 'und';
 }
 
+// MKV exposes the track name as `title`, MP4 as `name`.
+function titleOf(s) {
+  return (s.tags && (s.tags.title || s.tags.name)) || '';
+}
+
 function langOf(s) {
   const tag = s.tags && (s.tags.language || s.tags.LANGUAGE);
   const code = normalizeLang(tag);
-  return code !== 'und' ? code : langFromTitle(s.tags && s.tags.title);
+  return code !== 'und' ? code : langFromTitle(titleOf(s));
 }
 
 function languageName(code) {
@@ -166,7 +180,7 @@ function planAudio(streams) {
       channels: outChannels,
       bitrate: encode ? (outChannels > 2 ? '640k' : '192k') : null,
       language: langOf(a),
-      title: (a.tags && a.tags.title) || '',
+      title: titleOf(a),
       reasons,
     };
   });
@@ -178,19 +192,25 @@ function planSubtitles(streams, mode) {
     const text = TEXT_SUBS.has(codec);
     const bitmap = BITMAP_SUBS.has(codec);
     let action = 'drop';
+    let outCodec = null; // for embed: 'copy' | 'srt'
     let reason = '';
     if (mode === 'none') reason = 'subtitles disabled';
     else if (mode === 'burn') { action = 'burn'; reason = text ? 'burn text sub' : 'burn bitmap sub'; }
     else if (text && mode === 'sidecar') { action = 'sidecar'; reason = 'export as .srt next to output'; }
-    else if (text && mode === 'embed') { action = 'embed'; reason = 'embed as mov_text'; }
-    else if (bitmap) reason = `${codec} bitmap subs cannot go in MP4 (use burn to keep)`;
+    else if ((text || bitmap) && mode === 'embed') {
+      action = 'embed';
+      outCodec = MKV_COPY_SUBS.has(codec) ? 'copy' : 'srt';
+      reason = outCodec === 'copy' ? 'keep in MKV' : 'convert to SubRip in MKV';
+    }
+    else if (bitmap) reason = `${codec} bitmap subs cannot go in MP4 (embed or burn to keep)`;
     else reason = `unknown subtitle codec ${codec}`;
     return {
       index: s.index,
       action,
+      outCodec,
       codec,
       language: langOf(s),
-      title: (s.tags && s.tags.title) || '',
+      title: titleOf(s),
       forced: !!(s.disposition && s.disposition.forced),
       isDefault: !!(s.disposition && s.disposition.default),
       reason,
@@ -217,13 +237,16 @@ function plan(probe, userSettings = {}) {
 
   const container = (probe.format && probe.format.format_name) || '';
   const duration = +(probe.format && probe.format.duration) || 0;
+  const target = outputContainer(settings);
+  const sameContainer = target === 'mkv' ? /matroska/.test(container) : /mp4/.test(container);
   const needsWork = video.action === 'encode' || audio.some((a) => a.action === 'encode') ||
-    subs.length > 0 || !/mp4/.test(container);
+    subtitles.some((s) => !(s.action === 'embed' && s.outCodec === 'copy')) || !sameContainer;
 
   return {
     settings,
     duration,
     container,
+    outputContainer: target,
     video,
     audio,
     subtitles,
@@ -232,4 +255,4 @@ function plan(probe, userSettings = {}) {
   };
 }
 
-module.exports = { plan, DEFAULT_SETTINGS, isHdr, is10bit, normalizeLang, langFromTitle, languageName };
+module.exports = { plan, DEFAULT_SETTINGS, outputContainer, isHdr, is10bit, normalizeLang, langFromTitle, languageName };

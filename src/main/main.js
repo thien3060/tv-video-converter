@@ -4,7 +4,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
-const { plan } = require('./planner');
+const { plan, outputContainer } = require('./planner');
 const ff = require('./ffmpeg');
 
 const VIDEO_EXT = new Set(['.mkv', '.mp4', '.m4v', '.mov', '.avi', '.ts', '.m2ts', '.mts', '.webm', '.wmv', '.flv', '.mpg', '.mpeg', '.vob']);
@@ -49,8 +49,9 @@ function publish(job) { send('job:update', stripJob(job)); }
 function outputPathFor(input) {
   const dir = settings.outputDir || path.join(path.dirname(input), 'TV Ready');
   const base = path.basename(input, path.extname(input));
-  let out = path.join(dir, `${base}.mp4`);
-  if (path.resolve(out) === path.resolve(input)) out = path.join(dir, `${base}.tv.mp4`);
+  const ext = outputContainer(settings);
+  let out = path.join(dir, `${base}.${ext}`);
+  if (path.resolve(out) === path.resolve(input)) out = path.join(dir, `${base}.tv.${ext}`);
   return out;
 }
 
@@ -121,7 +122,7 @@ async function runJob(job) {
   job.startedAt = Date.now();
   job.error = null;
   publish(job);
-  const tmp = job.output.replace(/\.mp4$/i, '.partial.mp4');
+  const tmp = job.output.replace(/\.(mp4|mkv)$/i, '.partial.$1');
   try {
     if (!job.plan) job.plan = plan(job.probe || (job.probe = await ff.probe(job.input)), settings);
     await fsp.mkdir(path.dirname(job.output), { recursive: true });

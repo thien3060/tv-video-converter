@@ -189,15 +189,6 @@ function buildVideoFilter(plan, caps, inputFile, subIndexInFile) {
   return filters.join(',');
 }
 
-// Final picture size after any scale step, for sizing the subtitle tracks (null if unknown).
-function outputDims(v) {
-  let { width, height } = v.source || {};
-  if (!width || !height) return null;
-  if (v.scaleTo && v.scaleTo.height) { width = Math.round((width * v.scaleTo.height) / height / 2) * 2; height = v.scaleTo.height; }
-  else if (v.scaleTo && v.scaleTo.width) { height = Math.round((height * v.scaleTo.width) / width / 2) * 2; width = v.scaleTo.width; }
-  return { width, height };
-}
-
 // Track name shown by players that list titles: keep the source title, else build one from the
 // language, and number tracks that would otherwise be indistinguishable ("Spanish", "Spanish 2").
 function embedTitle(x, all) {
@@ -221,11 +212,13 @@ function buildArgs(inputFile, outputFile, plan, caps, finalOutput = outputFile) 
   }
   args.push('-i', inputFile);
 
+  const mkv = plan.outputContainer === 'mkv';
+
   // --- video ---
   args.push('-map', `0:${plan.video.index}`);
   if (plan.video.action === 'copy') {
     args.push('-c:v', 'copy');
-    if (plan.video.codec === 'hevc') args.push('-tag:v', 'hvc1');
+    if (plan.video.codec === 'hevc' && !mkv) args.push('-tag:v', 'hvc1');
   } else {
     if (!encoder) throw new Error('no usable video encoder found');
     const burn = plan.subtitles.find((x) => x.action === 'burn');
@@ -257,26 +250,24 @@ function buildArgs(inputFile, outputFile, plan, caps, finalOutput = outputFile) 
     if (a.title) args.push(`-metadata:s:a:${i}`, `title=${a.title}`);
   });
 
-  // --- embedded subtitles ---
+  // --- embedded subtitles (MKV only: the planner never picks 'embed' for an MP4 target) ---
   const embed = plan.subtitles.filter((x) => x.action === 'embed');
-  const dims = outputDims(plan.video);
   embed.forEach((x, i) => {
-    args.push('-map', `0:${x.index}`, `-c:s:${i}`, 'mov_text');
-    // tx3g's default text box is "the whole track", and a converted subtitle track has no size of
-    // its own, so without this the TV lists the track but draws the text into a 0x0 box.
-    if (dims) args.push(`-s:s:${i}`, `${dims.width}x${dims.height}`);
-    // Always set the language ourselves: the source tag may be one MP4 can't hold ('es-419'),
-    // which ffmpeg would drop and the TV would then show as "Language N".
+    args.push('-map', `0:${x.index}`, `-c:s:${i}`, x.outCodec === 'copy' ? 'copy' : 'srt');
+    // Always set the language ourselves: source tags like 'es-419' get normalised by the planner
+    // so the TV shows a language name rather than "Language N".
     args.push(`-metadata:s:s:${i}`, `language=${x.language}`);
     args.push(`-metadata:s:s:${i}`, `title=${embedTitle(x, embed)}`);
   });
   if (!embed.length) args.push('-sn');
 
-  args.push('-map_metadata', '0', '-map_chapters', '0', '-movflags', '+faststart', '-f', 'mp4', outputFile);
+  args.push('-map_metadata', '0', '-map_chapters', '0');
+  if (mkv) args.push('-f', 'matroska', outputFile);
+  else args.push('-movflags', '+faststart', '-f', 'mp4', outputFile);
 
   // --- sidecar .srt ---
   const sidecars = plan.subtitles.filter((x) => x.action === 'sidecar').map((x, i, all) => {
-    const base = finalOutput.replace(/\.mp4$/i, '');
+    const base = finalOutput.replace(/\.(mp4|mkv)$/i, '');
     const dupes = all.filter((o) => o.language === x.language).length;
     const suffix = dupes > 1 ? `.${x.language}.${i + 1}` : `.${x.language}`;
     return { index: x.index, path: `${base}${suffix}.srt` };

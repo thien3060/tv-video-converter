@@ -1,7 +1,7 @@
 {
   "name": "tv-converter",
   "productName": "TV Converter",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Drop videos in, get Samsung-TV-safe MP4s out.",
   "main": "src/main/main.js",
   "author": "thien",

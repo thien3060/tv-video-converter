@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Electron desktop app ("TV Converter") that turns arbitrary video files into Samsung-TV-safe MP4s. It probes each file with `ffprobe`, decides the *minimum* work needed (remux vs. GPU re-encode per stream), and runs `ffmpeg`. Plain CommonJS, vanilla HTML/CSS/JS renderer, no bundler, no framework, no transpilation.
+Electron desktop app ("TV Converter") that turns arbitrary video files into Samsung-TV-safe MKVs (when embedding subtitles, the default) or MP4s (sidecar/burn/none). It probes each file with `ffprobe`, decides the *minimum* work needed (remux vs. GPU re-encode per stream), and runs `ffmpeg`. Plain CommonJS, vanilla HTML/CSS/JS renderer, no bundler, no framework, no transpilation.
 
 ## Commands
 
@@ -28,9 +28,9 @@ Dev aid: `TVCONV_SHOT=<dir> npm start` writes a PNG of the window every 2s (opti
 
 Three main-process modules with a deliberate separation, plus a thin renderer:
 
-- **[src/main/planner.js](src/main/planner.js)** — *pure, no I/O.* `plan(probeJson, settings)` → a plan object describing, per stream, `copy`/`encode`/`sidecar`/`embed`/`burn`/`drop` plus human-readable `reasons`. All Samsung-compat policy lives here (safe codec sets, Hi10P rule, bitrate ceilings, HDR keep/tonemap, one-burn-track rule). `DEFAULT_SETTINGS` here is merged under whatever the caller passes. Unit-tested with canned probe JSON in [test/planner.test.js](test/planner.test.js) — add a test here whenever you change a decision rule.
+- **[src/main/planner.js](src/main/planner.js)** — *pure, no I/O.* `plan(probeJson, settings)` → a plan object describing, per stream, `copy`/`encode`/`sidecar`/`embed`/`burn`/`drop` plus human-readable `reasons`. All Samsung-compat policy lives here (safe codec sets, Hi10P rule, bitrate ceilings, HDR keep/tonemap, one-burn-track rule, `outputContainer`: embed ⇒ MKV, else MP4). `DEFAULT_SETTINGS` here is merged under whatever the caller passes. Unit-tested with canned probe JSON in [test/planner.test.js](test/planner.test.js) — add a test here whenever you change a decision rule.
 - **[src/main/ffmpeg.js](src/main/ffmpeg.js)** — everything that touches the binaries: `findBinary` (bundled `resources/bin/<platform>/` first, then PATH), `detectCapabilities` (parses `-encoders`/`-filters`, then does a *real test encode* per candidate to pick the first working encoder from NVENC → QSV → AMF → VideoToolbox → libx26x; cached and de-duplicated across callers), `probe`, `buildArgs(plan, caps)` (plan → ffmpeg argv + sidecar list), `runFfmpeg` (spawns with `-progress pipe:1`, parses progress blocks, supports AbortSignal), `extractSrt`.
-- **[src/main/main.js](src/main/main.js)** — Electron main: settings persistence (`userData/settings.json`), the job queue (`Map<id, Job>`), IPC handlers, and the `pump()` loop that respects `settings.concurrency`. Jobs are analyzed (probed + planned) immediately on add so the UI shows the plan before Start; `settings:set` triggers `replanAll()` so plans stay in sync with settings. Output is written to `<name>.partial.mp4` then renamed on success. The `probe` field is stripped before sending jobs to the renderer.
+- **[src/main/main.js](src/main/main.js)** — Electron main: settings persistence (`userData/settings.json`), the job queue (`Map<id, Job>`), IPC handlers, and the `pump()` loop that respects `settings.concurrency`. Jobs are analyzed (probed + planned) immediately on add so the UI shows the plan before Start; `settings:set` triggers `replanAll()` so plans stay in sync with settings. Output is written to `<name>.partial.<ext>` then renamed on success. The `probe` field is stripped before sending jobs to the renderer.
 - **[src/main/preload.js](src/main/preload.js)** — `contextBridge` exposing `window.api` (invoke wrappers + `onJobUpdate`/`onQueueState`/`onCapsReady` listeners). `contextIsolation: true`, `nodeIntegration: false`; use `webUtils.getPathForFile` for dropped files (Electron ≥32 removed `File.path`).
 - **[src/renderer/](src/renderer/)** — one table of jobs re-rendered per `job:update` event; talks to main only via `window.api`.
 
@@ -42,7 +42,8 @@ Data flow: drop/dialog → `jobs:add` → `analyze()` (probe → plan) → `job:
 - Bitmap subs (PGS/VobSub) can't be burned via the `subtitles` filter; `buildArgs` switches to `-filter_complex ... overlay` and replaces the initial `-map` via `splice`.
 - `-hwaccel cuda` is only added for NVENC *and* only when no software filter (tonemap/burn) is in the chain.
 - HDR re-encode without tonemap must stay 10-bit HEVC regardless of `videoCodec` preference (8-bit HDR looks grey). Tonemap sets colour tags via `setparams` in-graph because encoders ignore bare `-color_*` flags.
-- Embedded `mov_text` tracks need `-s:s:N WxH` (output picture size): tx3g's default text box is "the track's size" and a converted subtitle track is 0×0, so the TV lists the track but renders nothing. MP4 holds one ISO 639-2 code per track; `planner.js#langOf` normalises `es-419`/`pt_BR`/2-letter tags and falls back to the title, and `buildArgs` always writes `language=` itself (ffmpeg silently drops unpackable tags → "Language N" on the TV).
+- Don't embed subtitles in MP4. Samsung lists `mov_text`/tx3g tracks but never draws them (verified on hardware with correct track dims, text box and background — it's the player, not the file). Embed mode therefore outputs MKV with SubRip/ASS/PGS/VobSub copied as-is (`MKV_COPY_SUBS`), other text codecs converted to SubRip. `-tag:v hvc1` and `-movflags +faststart` are MP4-only.
+- Language tags: `planner.js#langOf` normalises `es-419`/`pt_BR`/2-letter tags to ISO 639-2/B and falls back to the track title, and `buildArgs` always writes `language=` itself — otherwise the TV shows "Language N".
 - `encoderArgs` maps the single `quality` setting differently per encoder (`-cq`, `-global_quality`, `-qp_*`, VideoToolbox `-q:v` inverted scale, `-crf`); maxrate/bufsize are tiered by output height.
 
 ## Packaging notes

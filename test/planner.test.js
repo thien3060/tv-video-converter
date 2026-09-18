@@ -73,6 +73,20 @@ test('audio: DTS → ac3 (6ch), FLAC stereo → aac, 8ch → 6ch ac3', () => {
   ]);
 });
 
+test('embed mode targets MKV and keeps text + bitmap subs; other modes target MP4', () => {
+  const subs = [{ codec_name: 'subrip' }, { codec_name: 'ass' }, { codec_name: 'hdmv_pgs_subtitle' }, { codec_name: 'mov_text' }, { codec_name: 'webvtt' }];
+  const p = plan(probe({ subs }));
+  assert.equal(p.outputContainer, 'mkv');
+  assert.deepEqual(p.subtitles.map((s) => s.action), ['embed', 'embed', 'embed', 'embed', 'embed']);
+  assert.deepEqual(p.subtitles.map((s) => s.outCodec), ['copy', 'copy', 'copy', 'srt', 'srt']);
+  assert.equal(p.video.action, 'copy');
+  for (const subtitleMode of ['sidecar', 'burn', 'none']) assert.equal(plan(probe({ subs }), { subtitleMode }).outputContainer, 'mp4');
+  // an MKV source whose streams all copy straight through needs no work in embed mode
+  assert.equal(plan(probe({ subs: [{ codec_name: 'subrip' }] })).needsWork, false);
+  assert.equal(plan(probe({ subs: [{ codec_name: 'webvtt' }] })).needsWork, true);
+  assert.equal(plan(probe({ subs: [{ codec_name: 'subrip' }] }), { subtitleMode: 'sidecar' }).needsWork, true);
+});
+
 test('subtitles: sidecar for text, drop PGS unless burning; burn picks forced track only', () => {
   const subs = [{ codec_name: 'subrip' }, { codec_name: 'hdmv_pgs_subtitle', tags: { language: 'jpn' } }, { codec_name: 'ass', disposition: { forced: 1 } }];
   const side = plan(probe({ subs }), { subtitleMode: 'sidecar' });

@@ -15,15 +15,15 @@ const have = !!(ff.BIN.ffmpeg && ff.BIN.ffprobe);
 async function convert(name, settings = {}) {
   const caps = await ff.detectCapabilities();
   const input = path.join(FIX, name);
-  const output = path.join(OUT, name.replace(/\.\w+$/, `.${Object.keys(settings).join('_') || 'default'}.mp4`));
   const probe = await ff.probe(input);
   const p = plan(probe, settings);
+  const output = path.join(OUT, name.replace(/\.\w+$/, `.${Object.keys(settings).join('_') || 'default'}.${p.outputContainer}`));
   const { args, sidecars } = ff.buildArgs(input, output, p, caps);
   const progress = [];
   await ff.runFfmpeg(args, { duration: p.duration, onProgress: (x) => progress.push(x.percent) });
   for (const sc of sidecars) await ff.extractSrt(input, sc.index, sc.path);
   const out = await ff.probe(output);
-  return { plan: p, out, sidecars, progress, args };
+  return { plan: p, out, sidecars, progress, args, output };
 }
 
 const vid = (pr) => pr.streams.find((s) => s.codec_type === 'video');
@@ -97,16 +97,17 @@ test('burn-in subtitles forces encode and drops sub streams', { skip: !have }, a
   assert.equal(r.sidecars.length, 0);
 });
 
-test('embed subtitles as mov_text', { skip: !have }, async () => {
+test('embed subtitles → MKV with the SubRip track copied and tagged', { skip: !have }, async () => {
   const r = await convert('clean_h264.mkv', { subtitleMode: 'embed' });
+  assert.match(r.output, /\.mkv$/);
+  assert.match(r.out.format.format_name, /matroska/);
+  assert.equal(vid(r.out).codec_name, 'h264');
   const subs = r.out.streams.filter((s) => s.codec_type === 'subtitle');
   assert.equal(subs.length, 1);
-  assert.equal(subs[0].codec_name, 'mov_text');
-  // tx3g track must carry the picture size or TVs render the text into a 0x0 box
-  assert.equal(subs[0].width, vid(r.out).width);
-  assert.equal(subs[0].height, vid(r.out).height);
+  assert.equal(subs[0].codec_name, 'subrip');
   assert.equal(subs[0].tags.language, 'eng');
-  assert.equal(subs[0].tags.name, 'English');
+  assert.equal(subs[0].tags.title, 'English');
+  assert.ok(!r.args.includes('hvc1') && !r.args.includes('+faststart'));
 });
 
 test('downscale to 1080p from a larger source', { skip: !have }, async () => {
